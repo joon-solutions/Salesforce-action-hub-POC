@@ -5,14 +5,16 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from icon import icon_data_uri
 from utils import authenticate, handle_error, list_to_html, safe_cast, sanitize_and_load_json_str
-from palm_api import model_with_limit_and_backoff, reduce, MODEL_TYPES, DEFAULT_MODEL_TYPE
+from gemini_api import model_with_limit_and_backoff, reduce
 
 
 BASE_DOMAIN = 'https://{}-{}.cloudfunctions.net/{}-'.format(os.environ.get(
     'REGION'), os.environ.get('PROJECT'), os.environ.get('ACTION_NAME'))
-
+OUTPUT_TOKEN_LIMIT = 8192
 
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#actions-list-endpoint
+
+
 def action_list(request):
     """Return action hub list endpoint data for action"""
     auth = authenticate(request)
@@ -20,7 +22,7 @@ def action_list(request):
         return auth
 
     response = {
-        'label': 'Looker Vertex AI [DEV]',
+        'label': 'Looker Vertex AI',
         'integrations': [{
             'name': os.environ.get('ACTION_NAME'),
             'label': os.environ.get('ACTION_LABEL'),
@@ -67,10 +69,6 @@ def action_form(request):
     if 'default_params' in form_params:
         default_params = form_params['default_params']
 
-    default_model_type = ''
-    if 'model_type' in form_params:
-        default_model_type = form_params['model_type']
-
     # step 1 - select a prompt
     response = [{
         'name': 'question',
@@ -102,24 +100,8 @@ def action_form(request):
         'interactive': True  # dynamic field for model specific options
     }]
 
-    # step 2 - optional - choose model type
-    if ('default_params' in form_params and
-            form_params['default_params'] == 'no'):
-        response.extend([{
-            'name': 'model_type',
-            'label': 'Model Type',
-            'type': 'select',
-            'default': default_model_type,
-            'options': [{'name': MODEL_TYPES['text-bison']['name'], 'label': MODEL_TYPES['text-bison']['label']},
-                        {'name': MODEL_TYPES['code-bison']['name'], 'label': MODEL_TYPES['code-bison']['label']}],
-            'interactive': True
-        }
-        ])
-
-    # step 3a - optional - customize model params used by both models
-    if ('default_params' in form_params and
-            form_params['default_params'] == 'no' and
-            'model_type' in form_params):
+    # step 2 - optional - customize model params used by both models
+    if ('default_params' in form_params and form_params['default_params'] == 'no'):
         response.extend([{
             'name': 'temperature',
             'label': 'Temperature',
@@ -130,18 +112,11 @@ def action_form(request):
             {
             'name': 'max_output_tokens',
             'label': 'Max Output Tokens',
-            'description': 'Maximum number of tokens that can be generated in the response (Acceptable values = 1–1024 for Text Bison. Acceptable values = 1-2048 for Code Bison.)',
+            'description': 'Maximum number of tokens that can be generated in the response (Acceptable values = 1 - {})'.format(OUTPUT_TOKEN_LIMIT),
             'type': 'text',
-            'default': '1024',
-        }
-        ])
-
-    # step 3b - optional - customize model params used by text-bison
-    if ('default_params' in form_params and
-            form_params['default_params'] == 'no' and
-            'model_type' in form_params and
-            form_params['model_type'] == DEFAULT_MODEL_TYPE):
-        response.extend([{
+            'default': str(OUTPUT_TOKEN_LIMIT),
+        },
+            {
             'name': 'top_k',
             'label': 'Top-k',
             'description': 'Top-k changes how the model selects tokens for output. Specify a lower value for less random responses and a higher value for more random responses. (Acceptable values = 1-40)',
@@ -176,13 +151,10 @@ def action_execute(request):
     print(action_params)
     print(form_params)
 
-    maximum_max_output_tokens = MODEL_TYPES[form_params['model_type']]['max_output_tokens'] if 'model_type' in form_params else 1024
-
-    model_type = DEFAULT_MODEL_TYPE if 'model_type' not in form_params else MODEL_TYPES[form_params['model_type']]['name']
     temperature = 0.2 if 'temperature' not in form_params else safe_cast(
         form_params['temperature'], float, 0.0, 1.0, 0.2)
-    max_output_tokens = 1024 if 'max_output_tokens' not in form_params else safe_cast(
-        form_params['max_output_tokens'], int, 1, maximum_max_output_tokens, 1024)
+    max_output_tokens = OUTPUT_TOKEN_LIMIT if 'max_output_tokens' not in form_params else safe_cast(
+        form_params['max_output_tokens'], int, 1, OUTPUT_TOKEN_LIMIT, OUTPUT_TOKEN_LIMIT)
     top_k = 40 if 'top_k' not in form_params else safe_cast(
         form_params['top_k'], int, 1, 40, 40)
     top_p = 0.8 if 'top_p' not in form_params else safe_cast(
@@ -191,7 +163,7 @@ def action_execute(request):
     # placeholder for model error email response
     body = 'There was a problem running the model. Please try again with less data. '
     summary = ''
-    row_chunks = 50  # mumber of rows to summarize together
+    row_chunks = 200  # mumber of rows to summarize together
     try:
         all_data = sanitize_and_load_json_str(
             attachment['data'])
@@ -199,7 +171,7 @@ def action_execute(request):
             row_chunks = 1  # run function on each row individually
 
         summary = model_with_limit_and_backoff(
-            all_data, question, row_chunks, model_type, temperature, max_output_tokens, top_k, top_p)
+            all_data, question, row_chunks, temperature, max_output_tokens, top_k, top_p)
 
         # if row, zip prompt_result with all_data and send html table
         if form_params['row_or_all'] == 'row':
@@ -214,7 +186,7 @@ def action_execute(request):
                     summary[0].replace('\n', '<br>'))
             else:
                 reduced_summary = reduce(
-                    '\n'.join(summary), model_type, temperature, max_output_tokens, top_k, top_p)
+                    '\n'.join(summary), temperature, max_output_tokens, top_k, top_p)
                 body = 'Final Prompt Result:<br><strong>{}</strong><br><br>'.format(
                     reduced_summary.replace('\n', '<br>'))
                 body += '<br><br><strong>Batch Prompt Result:</strong><br>'
@@ -224,7 +196,7 @@ def action_execute(request):
             body += list_to_html(all_data)
 
     except Exception as e:
-        body += 'PaLM API Error: ' + e.message
+        body += 'Gemini API Error: ' + e.message
         print(body)
 
     if body == '':
