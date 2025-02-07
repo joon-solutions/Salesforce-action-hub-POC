@@ -1,221 +1,167 @@
+import requests
 import json
 import os
-from flask import Response
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+import base64
+from flask import request, Response, redirect
 from icon import icon_data_uri
-from utils import authenticate, handle_error, list_to_html, safe_cast, sanitize_and_load_json_str
-from gemini_api import model_with_limit_and_backoff, reduce
+import utils
+from dotenv import load_dotenv
+load_dotenv()
 
 
-BASE_DOMAIN = 'https://{}-{}.cloudfunctions.net/{}-'.format(os.environ.get(
-    'REGION'), os.environ.get('PROJECT'), os.environ.get('ACTION_NAME'))
-OUTPUT_TOKEN_LIMIT = 8192
+
+BASE_DOMAIN = f"https://{os.environ.get('REGION')}-{os.environ.get('PROJECT')}.cloudfunctions.net/{os.environ.get('ACTION_NAME')}-"
 
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#actions-list-endpoint
-
-
 def action_list(request):
     """Return action hub list endpoint data for action"""
-    auth = authenticate(request)
+    auth = utils.authenticate(request)
     if auth.status_code != 200:
         return auth
 
     response = {
-        'label': 'Looker Vertex AI',
-        'integrations': [{
-            'name': os.environ.get('ACTION_NAME'),
-            'label': os.environ.get('ACTION_LABEL'),
-            'supported_action_types': ['query'],
-            "icon_data_uri": icon_data_uri,
-            'form_url': BASE_DOMAIN + 'form',
-            'url': BASE_DOMAIN + 'execute',
-            'supported_formats': ['json'],
-            'supported_formattings': ['formatted'],
-            'supported_visualization_formattings': ['noapply'],
-            'params': [
-                {'name': 'email', 'label': 'Email',
-                    'user_attribute_name': 'email', 'required': True},
-                {'name': 'user_id', 'label': 'User ID',
-                    'user_attribute_name': 'id', 'required': True}
-            ]
-        }]
+        'label': 'POC Action Hub',
+        'integrations': [
+            {
+                'name': os.environ.get('ACTION_NAME'),
+                'label': os.environ.get('ACTION_LABEL'),
+                'supported_action_types': ['query', 'cell', 'dashboard'],
+                "icon_data_uri": "https://pics.freeicons.io/uploads/icons/png/18502552271551942822-512.png",
+                'form_url': BASE_DOMAIN + 'form',
+                'url': BASE_DOMAIN + 'execute',
+                'supported_formats': ['json'],
+                'reaquire_fields': [], # TODO refer to action list endpoint documentation - https://cloud.google.com/looker/docs/action-hub#supported_action_types
+                'supported_formattings': ['formatted'],
+                'supported_visualization_formattings': ['noapply'],
+                'params': [
+                    {
+                        'description': "Salesforce domain name, e.g. https://MyDomainName.my.salesforce.com",
+                        'label': "Salesforce domain",
+                        'name': "salesforce_domain",
+                        'required': True,
+                        'sensitive': False
+                    }
+                ],
+                'uses_oauth': True
+            }
+        ]
     }
 
     print('returning integrations json')
     return Response(json.dumps(response), status=200, mimetype='application/json')
 
-
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#action-form-endpoint
 def action_form(request):
     """Return form endpoint data for action"""
-    auth = authenticate(request)
+    auth = utils.authenticate(request)
     if auth.status_code != 200:
         return auth
 
-    request_json = request.get_json()
-    form_params = request_json['form_params']
-    print(form_params)
-
-    default_question = 'Can you summarize the following dataset in 10 bullet points?'
-    if 'question' in form_params:
-        default_question = form_params['question']
-
-    default_row_or_all = 'all'
-    if 'row_or_all' in form_params:
-        default_row_or_all = form_params['row_or_all']
-
-    default_params = 'yes'
-    if 'default_params' in form_params:
-        default_params = form_params['default_params']
-
-    # step 1 - select a prompt
     response = [{
-        'name': 'question',
-        'label': 'Type your AI prompt',
-        'description': 'Type your prompt to generate a model response.',
-        'type': 'textarea',
-        'required': True,
-        "default":  default_question
-    },
-        {
-        'name': 'row_or_all',
-        'label': 'Run per row or all results?',
-        'description': "Choose whether to run the model on all the results together, or, individually per row.",
-        'type': 'select',
-        'required': True,
-        "default":  default_row_or_all,
-        'options': [{'name': 'all', 'label': 'All Results'},
-                    {'name': 'row', 'label': 'Per Row'}],
-    },
-        {
-        'name': 'default_params',
-        'label': 'Default Parameters?',
-        'description': "Select 'no' to customize text model parameters.",
-        'type': 'select',
-        'required': True,
-        "default":  default_params,
-        'options': [{'name': 'yes', 'label': 'Yes'},
-                    {'name': 'no', 'label': 'No'}],
-        'interactive': True  # dynamic field for model specific options
-    }]
-
-    # step 2 - optional - customize model params used by both models
-    if ('default_params' in form_params and form_params['default_params'] == 'no'):
-        response.extend([{
-            'name': 'temperature',
-            'label': 'Temperature',
-            'description': 'The temperature is used for sampling during the response generation, which occurs when topP and topK are applied (Acceptable values = 0.0–1.0)',
+            'name': 'campaign_name',
+            'label': 'Campaign Name',
+            'description': 'Identifying name of the campaign',
             'type': 'text',
-            'default': '0.2',
+            'required': True
         },
             {
-            'name': 'max_output_tokens',
-            'label': 'Max Output Tokens',
-            'description': 'Maximum number of tokens that can be generated in the response (Acceptable values = 1 - {})'.format(OUTPUT_TOKEN_LIMIT),
-            'type': 'text',
-            'default': str(OUTPUT_TOKEN_LIMIT),
+            'name': 'start_date',
+            'label': 'Start Date',
+            'description': "Start date of the campaign",
+            'type': 'date',
+            'required': True
         },
             {
-            'name': 'top_k',
-            'label': 'Top-k',
-            'description': 'Top-k changes how the model selects tokens for output. Specify a lower value for less random responses and a higher value for more random responses. (Acceptable values = 1-40)',
-            'type': 'text',
-            'default': '40',
+            'name': 'end_date',
+            'label': 'End Date',
+            'description': "End date of the campaign",
+            'type': 'date',
+            'required': True
         },
             {
-            'name': 'top_p',
-            'label': 'Top-p',
-            'description': 'Top-p changes how the model selects tokens for output. Specify a lower value for less random responses and a higher value for more random responses. (Acceptable values = 0.0–1.0)',
+            'name': 'campaign_status',
+            'label': 'Campaign Status',
+            'description': "Status of the campaign",
             'type': 'text',
-            'default': '0.8',
+            'required': True
+        },
+            {
+            'name': 'campaign_type',
+            'label': 'Campaign Type',
+            'description': "Type of the campaign",
+            'type': 'text',
+            'required': True
         }
-        ])
-
-    print('returning form json: {}'.format(json.dumps(response)))
+    ]
+    print(f'returning form json: {json.dumps(response)}')
     return Response(json.dumps(response), status=200, mimetype='application/json')
+
+
 
 
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#action-execute-endpoint
 def action_execute(request):
-    """Generate a response from Generative AI Studio from a Looker action"""
-    auth = authenticate(request)
+    """Process form input and send data to Salesforce to create a new campaign"""
+    auth = utils.authenticate(request)
     if auth.status_code != 200:
         return auth
-
     request_json = request.get_json()
-    attachment = request_json['attachment']
-    action_params = request_json['data']
     form_params = request_json['form_params']
-    question = form_params['question']
-    print(action_params)
-    print(form_params)
 
-    temperature = 0.2 if 'temperature' not in form_params else safe_cast(
-        form_params['temperature'], float, 0.0, 1.0, 0.2)
-    max_output_tokens = OUTPUT_TOKEN_LIMIT if 'max_output_tokens' not in form_params else safe_cast(
-        form_params['max_output_tokens'], int, 1, OUTPUT_TOKEN_LIMIT, OUTPUT_TOKEN_LIMIT)
-    top_k = 40 if 'top_k' not in form_params else safe_cast(
-        form_params['top_k'], int, 1, 40, 40)
-    top_p = 0.8 if 'top_p' not in form_params else safe_cast(
-        form_params['top_p'], float, 0.0, 1.0, 0.8)
+    # get token using username/password
+    url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
+    client_id = os.environ.get('SALESFORCE_CLIENT_ID')
+    client_secret = os.environ.get('SALESFORCE_CLIENT_SECRET')
+    username = os.environ.get('SALESFORCE_USERNAME')
+    password = os.environ.get('SALESFORCE_PASSWORD')
 
-    # placeholder for model error email response
-    body = 'There was a problem running the model. Please try again with less data. '
-    summary = ''
-    row_chunks = 200  # mumber of rows to summarize together
-    try:
-        all_data = sanitize_and_load_json_str(
-            attachment['data'])
-        if form_params['row_or_all'] == 'row':
-            row_chunks = 1  # run function on each row individually
+    payload = {'grant_type': 'password',
+    'client_id': client_id,
+    'client_secret': client_secret,
+    'username': username,
+    'password': password}
+    headers = {}
 
-        summary = model_with_limit_and_backoff(
-            all_data, question, row_chunks, temperature, max_output_tokens, top_k, top_p)
-
-        # if row, zip prompt_result with all_data and send html table
-        if form_params['row_or_all'] == 'row':
-            for i in range(len(all_data)):
-                all_data[i]['prompt_result'] = summary[i]
-            body = list_to_html(all_data)
-
-        # if all, send summary on top of all_data
-        if form_params['row_or_all'] == 'all':
-            if len(summary) == 1:
-                body = 'Prompt Result:<br><strong>{}</strong><br><br><br>'.format(
-                    summary[0].replace('\n', '<br>'))
-            else:
-                reduced_summary = reduce(
-                    '\n'.join(summary), temperature, max_output_tokens, top_k, top_p)
-                body = 'Final Prompt Result:<br><strong>{}</strong><br><br>'.format(
-                    reduced_summary.replace('\n', '<br>'))
-                body += '<br><br><strong>Batch Prompt Result:</strong><br>'
-                body += '<br><br><strong>Batch Prompt Result:</strong><br>'.join(
-                    summary).replace('\n', '<br>') + '<br><br><br>'
-
-            body += list_to_html(all_data)
-
-    except Exception as e:
-        body += 'Gemini API Error: ' + e.message
-        print(body)
-
-    if body == '':
-        body = 'No response from model. Try asking a more specific question.'
+    print(f'payload: {payload}')
+    response = requests.request("POST", url, headers=headers, data=payload, timeout = 10)
+    print(f'response: {response.json()}')
+    token = response.json()['access_token']
 
     try:
-        # todo - make email prettier
-        message = Mail(
-            from_email=os.environ.get('EMAIL_SENDER'),
-            to_emails=action_params['email'],
-            subject='Your GenAI Report from Looker',
-            html_content=body
-        )
+        campaign_name = form_params['campaign_name']
+        start_date = form_params['start_date']
+        end_date = form_params['end_date']
+        campaign_status = form_params['campaign_status']
+        campaign_type = form_params['campaign_type']
+    except KeyError as e:
+        return utils.handle_error(f"Missing required parameter: {e}", 400)
 
-        sg = SendGridAPIClient(os.environ.get('SENDGRID_API_KEY'))
-        response = sg.send(message)
-        print('Message status code: {}'.format(response.status_code))
-    except Exception as e:
-        error = handle_error('SendGrid Error: ' + e.message, 400)
-        return error
+    # create campaign via api
+    url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/composite/sobjects"
+    payload = json.dumps({
+        "allOrNone": False,
+        "records": [
+            {
+                "attributes": {"type": "Campaign"},
+                "Name": campaign_name,
+                "StartDate" : start_date,
+                "EndDate" : end_date,
+                "Status" : campaign_status,
+                "Type" : campaign_type
+            }
+        ]
+    })
 
-    return Response(status=200, mimetype='application/json')
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    print(f'create campaign payload: {payload}')
+    print(f'create campaign headers: {headers}')
+    response = requests.post(url, headers=headers, data=payload, timeout=10)
+    print(f'create campaign response: {response.json()}')
+    print(f'create campaign response status: {response.status_code}')
+    if response.status_code in [200, 201] and response.json()[0]['success']:
+        return Response(status=200, mimetype="application/json")
+    else:
+        return Response(status=response.status_code, mimetype="application/json", response=json.dumps(response.json()))
