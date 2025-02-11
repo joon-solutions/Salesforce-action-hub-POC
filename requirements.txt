@@ -49,8 +49,5 @@ tzdata==2024.1
 urllib3==2.2.2
 Werkzeug==3.0.3
 requests==2.32.3
-<<<<<<< HEAD
 python-dotenv
-=======
 pybase64==1.4.0
->>>>>>> 9235995 (one deployment)
