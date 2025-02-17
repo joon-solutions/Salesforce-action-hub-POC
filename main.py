@@ -1,3 +1,4 @@
+from datetime import datetime
 import requests
 import json
 import os
@@ -67,14 +68,15 @@ def action_form(request):
             {
             'name': 'start_date',
             'label': 'Start Date',
-            'description': "Start date of the campaign",
+            'description': "Start date of the campaign (YYYY-MM-DD)",
             'type': 'date',
+            'default':  datetime.today().strftime('%Y-%m-%d'),
             'required': True
         },
             {
             'name': 'end_date',
             'label': 'End Date',
-            'description': "End date of the campaign",
+            'description': "End date of the campaign (YYYY-MM-DD)",
             'type': 'date',
             'required': True
         },
@@ -82,15 +84,25 @@ def action_form(request):
             'name': 'campaign_status',
             'label': 'Campaign Status',
             'description': "Status of the campaign",
-            'type': 'text',
-            'required': True
+            'type': 'select',
+            'required': True,
+            'options': [
+                {'name': 'planned', 'label': 'Planned'},
+                {'name': 'in_progress', 'label': 'In Progress'},
+                {'name': 'completed', 'label': 'Completed'}
+            ]
         },
             {
             'name': 'campaign_type',
             'label': 'Campaign Type',
             'description': "Type of the campaign",
-            'type': 'text',
-            'required': True
+            'type': 'select',
+            'required': True,
+            'options': [
+                {'name': 'webinar', 'label': 'Webinar'},
+                {'name': 'advertisement', 'label': 'Advertisement'},
+                {'name': 'email', 'label': 'Email'}
+            ]
         }
     ]
     print(f'returning form json: {json.dumps(response)}')
