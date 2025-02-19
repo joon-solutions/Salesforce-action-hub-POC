@@ -1,12 +1,15 @@
-from datetime import datetime
 import requests
 import json
 import os
 import base64
+import utils
+import re
+
+from datetime import datetime
 from flask import request, Response, redirect
 from icon import icon_data_uri
-import utils
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -119,6 +122,11 @@ def action_execute(request):
         return auth
     request_json = request.get_json()
     form_params = request_json['form_params']
+    attachment = request_json['attachment']
+    # attachment_data = attachment['data']
+    print(form_params)
+    print(attachment)
+    # print(attachment_data)
 
     # get token using username/password
     url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
@@ -126,6 +134,39 @@ def action_execute(request):
     client_secret = os.environ.get('SALESFORCE_CLIENT_SECRET')
     username = os.environ.get('SALESFORCE_USERNAME')
     password = os.environ.get('SALESFORCE_PASSWORD')
+
+    validation_errors = {}
+    # form params error handling
+    try:
+        campaign_name = form_params['campaign_name']
+        start_date = form_params['start_date']
+        end_date = form_params['end_date']
+        campaign_status = form_params['campaign_status']
+        campaign_type = form_params['campaign_type']
+    except KeyError as e:
+        validation_errors[str(e).strip("'")] = "Missing required parameter"
+        response = {
+                "looker": {
+                    "success": False,
+                    "validation_errors": {
+                    str(e).strip("'"): "Missing required parameter"
+                    }
+                }
+            }
+    
+    if not bool(re.match(r"^\d{4}-\d{2}-\d{2}$", end_date)):
+        validation_errors['end_date'] = "Invalid date format. Please use YYYY-MM-DD format"
+    if not bool(re.match(r"^\d{4}-\d{2}-\d{2}$", start_date)):
+        validation_errors['start_date'] = "Invalid date format. Please use YYYY-MM-DD format"
+    if validation_errors:
+        response = {
+            "looker": {
+                "success": False,
+                "validation_errors": validation_errors
+            }
+        }
+        return Response(status=400, mimetype="application/json", response=json.dumps(response))
+
 
     payload = {'grant_type': 'password',
     'client_id': client_id,
@@ -138,15 +179,6 @@ def action_execute(request):
     response = requests.request("POST", url, headers=headers, data=payload, timeout = 10)
     print(f'response: {response.json()}')
     token = response.json()['access_token']
-
-    try:
-        campaign_name = form_params['campaign_name']
-        start_date = form_params['start_date']
-        end_date = form_params['end_date']
-        campaign_status = form_params['campaign_status']
-        campaign_type = form_params['campaign_type']
-    except KeyError as e:
-        return utils.handle_error(f"Missing required parameter: {e}", 400)
 
     # create campaign via api
     url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/composite/sobjects"
