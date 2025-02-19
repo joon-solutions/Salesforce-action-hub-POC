@@ -60,12 +60,22 @@ def action_form(request):
     auth = utils.authenticate(request)
     if auth.status_code != 200:
         return auth
+    
+    request_json = request.get_json()
+    data = request_json['data']
+    print(data)
+    
+    field_value = ''
+
+    if 'value' in data:
+        field_value = data['value']
 
     response = [{
             'name': 'campaign_name',
             'label': 'Campaign Name',
             'description': 'Identifying name of the campaign',
             'type': 'text',
+            'default': field_value,
             'required': True
         },
             {
@@ -122,11 +132,7 @@ def action_execute(request):
         return auth
     request_json = request.get_json()
     form_params = request_json['form_params']
-    attachment = request_json['attachment']
-    # attachment_data = attachment['data']
     print(form_params)
-    print(attachment)
-    # print(attachment_data)
 
     # get token using username/password
     url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
