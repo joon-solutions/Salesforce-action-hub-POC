@@ -19,16 +19,6 @@ The two variables you must to modify are:
 - `PROJECT` - ID you want to deploy the Cloud Functions to
 - `EMAIL_SENDER` - Email address of the sender
 
-1. Set the variables below:
-
-   ```
-   ACTION_LABEL="Vertex AI"
-   ACTION_NAME="vertex-ai"
-   REGION="us-central1"
-   PROJECT="my-project-id"
-   EMAIL_SENDER="my-sender-email-address@foo.com"
-
-   ```
 
 1. Clone this repo
 
@@ -36,11 +26,18 @@ The two variables you must to modify are:
    git clone https://github.com/looker-open-source/vertex-ai-actions
    cd vertex-ai-actions/
    ```
-
-1. Create a [.env.yaml](.env.yaml.example) with variables:
+1. Create a copy of `.env.example`, rename it to `.env` and set the variables in `.env`:
 
    ```
-   printf "ACTION_LABEL: ${ACTION_LABEL}\nACTION_NAME: ${ACTION_NAME}\nREGION: ${REGION}\nPROJECT: ${PROJECT}\nEMAIL_SENDER: ${EMAIL_SENDER}" > .env.yaml
+   ACTION_LABEL="Action label"
+   ACTION_NAME="ACTION_LABEL"
+   REGION="us-central1" # TODO update to your GCP region
+   PROJECT="PROJECT_ID"
+
+   SALESFORCE_CLIENT_ID="YOUR_CLIENT_ID"
+   SALESFORCE_CLIENT_SECRET="YOUR_CLIENT_SECRET"
+   SALESFORCE_USERNAME="YOUR_USERNAME"
+   SALESFORCE_PASSWORD="YOUR_PASSWORD"
    ```
 
 1. Generate the LOOKER_AUTH_TOKEN secret. The auth token secret can be any randomly generated string. You can generate such a string with the openssl command:
@@ -49,39 +46,7 @@ The two variables you must to modify are:
    LOOKER_AUTH_TOKEN="`openssl rand -hex 64`"
    ```
 
-1. Add the Auth Token and [Sendgird API key](https://app.sendgrid.com/settings/api_keys) as Secrets, then create a Service Account to run the Cloud Functions and give it access to the Secrets:
-
-   ```
-   SENDGRID_API_KEY="copy your sendgrid api key here"
-
-   printf ${SENDGRID_API_KEY} | gcloud secrets create SENDGRID_API_KEY --data-file=- --replication-policy=user-managed --locations=${REGION} --project=${PROJECT}
-
-   printf ${LOOKER_AUTH_TOKEN} | gcloud secrets create LOOKER_AUTH_TOKEN --data-file=- --replication-policy=user-managed --locations=${REGION} --project=${PROJECT}
-
-   gcloud iam service-accounts create vertex-ai-actions-cloud-function --display-name="Vertex AI Actions Cloud Functions" --project=${PROJECT}
-
-   SERVICE_ACCOUNT_EMAIL=vertex-ai-actions-cloud-function@${PROJECT}.iam.gserviceaccount.com
-
-   eval gcloud projects add-iam-policy-binding ${PROJECT} --member=serviceAccount:${SERVICE_ACCOUNT_EMAIL} --role='roles/cloudfunctions.invoker'
-
-   eval gcloud projects add-iam-policy-binding ${PROJECT} --member=serviceAccount:${SERVICE_ACCOUNT_EMAIL} --role='roles/aiplatform.user'
-
-   eval gcloud projects add-iam-policy-binding ${PROJECT} --member=serviceAccount:${SERVICE_ACCOUNT_EMAIL} --role='roles/secretmanager.secretAccessor'
-
-   eval gcloud secrets add-iam-policy-binding SENDGRID_API_KEY --member=serviceAccount:${SERVICE_ACCOUNT_EMAIL} --role='roles/secretmanager.secretAccessor' --project=${PROJECT}
-
-   eval gcloud secrets add-iam-policy-binding LOOKER_AUTH_TOKEN --member=serviceAccount:${SERVICE_ACCOUNT_EMAIL} --role='roles/secretmanager.secretAccessor' --project=${PROJECT}
-   ```
-
-1. Deploy 3 cloud functions for action hub listing, action form, and action execute (this may take a few minutes):
-
-   ```
-   gcloud functions deploy vertex-ai-list --entry-point action_list --env-vars-file .env.yaml --trigger-http --runtime=python311 --allow-unauthenticated --no-gen2 --memory=1024MB --timeout=540s --region=${REGION} --project=${PROJECT} --service-account ${SERVICE_ACCOUNT_EMAIL} --set-secrets 'LOOKER_AUTH_TOKEN=LOOKER_AUTH_TOKEN:latest'
-
-   gcloud functions deploy vertex-ai-form --entry-point action_form --env-vars-file .env.yaml --trigger-http --runtime=python311 --allow-unauthenticated --no-gen2 --memory=1024MB --timeout=540s --region=${REGION} --project=${PROJECT} --service-account ${SERVICE_ACCOUNT_EMAIL} --set-secrets 'LOOKER_AUTH_TOKEN=LOOKER_AUTH_TOKEN:latest'
-
-   gcloud functions deploy vertex-ai-execute --entry-point action_execute --env-vars-file .env.yaml --trigger-http --runtime=python311 --allow-unauthenticated --no-gen2 --memory=8192MB --timeout=540s --region=${REGION} --project=${PROJECT} --service-account ${SERVICE_ACCOUNT_EMAIL} --set-secrets 'LOOKER_AUTH_TOKEN=LOOKER_AUTH_TOKEN:latest,SENDGRID_API_KEY=SENDGRID_API_KEY:latest'
-   ```
+1. Run `bash deploy.sh` and wait for the deployment to finish
 
 1. Copy the Action Hub URL (`action_list` endpoint) and the `LOOKER_AUTH_TOKEN` to input into Looker:
 

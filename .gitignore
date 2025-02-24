@@ -1,9 +1,10 @@
 .vscode
 .env.yaml
-<<<<<<< HEAD
 .env
-=======
 .env.secret.yaml
 *.pyc
 deploy.key
->>>>>>> 9235995 (one deployment)
+deploy_joon.sh
+main-dev.py
+Pipfile*
+test.ipynb
