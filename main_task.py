@@ -29,9 +29,9 @@ def action_task_form(request):
         field_value = data['value']
 
     response = [{
-            'name': 'what_id',
-            'label': 'Related Object ID',
-            'description': 'ID of the related object',
+            'name': 'case_no',
+            'label': 'Case Number',
+            'description': 'Number of the case',
             'type': 'text',
             'default': field_value,
             'required': True
@@ -92,7 +92,7 @@ def action_task_execute(request):
     validation_errors = {}
     # form params error handling
     try:
-        what_id = form_params['what_id']
+        case_no = form_params['case_no']
         task_subject = form_params['task_subject']
         task_priority = form_params['task_priority']
         task_status = form_params['task_status']
@@ -129,7 +129,24 @@ def action_task_execute(request):
     print(f'response: {response.json()}')
     token = response.json()['access_token']
 
-    # create campaign via api
+    # get object id from case number
+    url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/query/"
+    query = f"SELECT Id FROM Case WHERE CaseNumber = '{case_no}'"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    response = requests.request("GET", url, headers=headers, params={"q": query}, timeout=10)
+
+    if response.status_code in [200, 201] and 'Id' in response:
+        records = response.json().get("records", [])
+        what_id = records[0].get("Id")
+        print(what_id)
+    else:
+        print(f"No case found for Case Number: {case_no}")
+    
+    # create task via api
     url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/composite/sobjects"
     payload = json.dumps({
         "allOrNone": False,
@@ -148,11 +165,11 @@ def action_task_execute(request):
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
-    print(f'create campaign payload: {payload}')
-    print(f'create campaign headers: {headers}')
+    print(f'create task payload: {payload}')
+    print(f'create task headers: {headers}')
     response = requests.post(url, headers=headers, data=payload, timeout=10)
-    print(f'create campaign response: {response.json()}')
-    print(f'create campaign response status: {response.status_code}')
+    print(f'create task response: {response.json()}')
+    print(f'create task response status: {response.status_code}')
     if response.status_code in [200, 201] and response.json()[0]['success']:
         return Response(status=200, mimetype="application/json")
     else:
