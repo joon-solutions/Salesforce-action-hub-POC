@@ -139,7 +139,7 @@ def action_task_execute(request):
 
     response = requests.request("GET", url, headers=headers, params={"q": query}, timeout=10)
 
-    if response.status_code in [200, 201] and 'Id' in response:
+    if response.status_code in [200, 201]:
         records = response.json().get("records", [])
         what_id = records[0].get("Id")
         print(what_id)
