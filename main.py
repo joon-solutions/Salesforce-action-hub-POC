@@ -7,7 +7,6 @@ import re
 
 from datetime import datetime
 from flask import request, Response, redirect
-from icon import icon_data_uri
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -55,6 +54,28 @@ def action_list(request):
                 "icon_data_uri": "https://pics.freeicons.io/uploads/icons/png/18502552271551942822-512.png",
                 'form_url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-task-creator-poc-form',
                 'url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-task-creator-poc-execute',
+                'supported_formats': ['json', 'csv_zip'],
+                'required_fields': [{"any_tag": ["sfdc_lead_id"]}],
+                'supported_formattings': ['formatted'],
+                'supported_visualization_formattings': ['noapply'],
+                'params': [
+                    {
+                        'description': "Salesforce domain name, e.g. https://MyDomainName.my.salesforce.com",
+                        'label': "Salesforce domain",
+                        'name': "salesforce_domain",
+                        'required': True,
+                        'sensitive': False
+                    }
+                ],
+                'uses_oauth': True
+            },
+            {
+                'name': 'salesforce-chatter-creator-poc',
+                'label': 'Salesforce Chatter Creator POC',
+                'supported_action_types': ['query', 'cell', 'dashboard'],
+                "icon_data_uri": "https://pics.freeicons.io/uploads/icons/png/18502552271551942822-512.png",
+                'form_url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-chatter-creator-poc-form',
+                'url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-chatter-creator-poc-execute',
                 'supported_formats': ['json', 'csv_zip'],
                 'required_fields': [{"any_tag": ["sfdc_lead_id"]}],
                 'supported_formattings': ['formatted'],
