@@ -12,58 +12,26 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#action-form-endpoint
-def action_task_form(request):
+def question_form(request):
     """Return form endpoint data for action"""
     auth = utils.authenticate(request)
     if auth.status_code != 200:
         return auth
-    
-    request_json = request.get_json()
-    data = request_json['data']
-    print(data)
-    
-    field_value = ''
-
-    if 'value' in data:
-        field_value = data['value']
 
     response = [{
-            'name': 'case_no',
-            'label': 'Case Number',
-            'description': 'Number of the case',
-            'type': 'text',
-            'default': field_value,
-            'required': True
-        },
-            {
-            'name': 'task_subject',
-            'label': 'Task Subject',
-            'description': "Subject of the task",
+            'name': 'question',
+            'label': 'Question',
+            'description': "What would you like to know?",
             'type': 'text',
             'required': True
         },
             {
-            'name': 'task_status',
-            'label': 'Task Status',
-            'description': "Status of the task",
-            'type': 'select',
-            'required': True,
-            'options': [
-                {'name': 'open', 'label': 'Open'},
-                {'name': 'completed', 'label': 'Completed'}
-            ]
+            'name': 'detail',
+            'label': 'Detail',
+            'description': "If you have more to say, add detail here",
+            'type': 'text',
+            'required': True
         },
-            {
-            'name': 'task_priority',
-            'label': 'Task Priority',
-            'description': "Priority of the task",
-            'type': 'select',
-            'required': True,
-            'options': [
-                {'name': 'normal', 'label': 'Normal'},
-                {'name': 'high', 'label': 'High'}
-            ]
-        }
     ]
     print(f'returning form json: {json.dumps(response)}')
     return Response(json.dumps(response), status=200, mimetype='application/json')
@@ -72,14 +40,22 @@ def action_task_form(request):
 
 
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#action-execute-endpoint
-def action_task_execute(request):
+def question_execute(request):
     """Process form input and send data to Salesforce to create a new campaign"""
     auth = utils.authenticate(request)
     if auth.status_code != 200:
         return auth
     request_json = request.get_json()
     form_params = request_json['form_params']
+    data = request_json['data']
     print(form_params)
+    print(data)
+    
+    cell_value = ''
+
+    if 'value' in data:
+        cell_value = data['value']
+    
 
     # get token using username/password
     url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
@@ -91,10 +67,8 @@ def action_task_execute(request):
     validation_errors = {}
     # form params error handling
     try:
-        case_no = form_params['case_no']
-        task_subject = form_params['task_subject']
-        task_priority = form_params['task_priority']
-        task_status = form_params['task_status']
+        question = form_params['question']
+        detail = form_params['detail']
     except KeyError as e:
         validation_errors[str(e).strip("'")] = "Missing required parameter"
         response = {
@@ -127,49 +101,40 @@ def action_task_execute(request):
     response = requests.request("POST", url, headers=headers, data=payload, timeout = 10)
     print(f'response: {response.json()}')
     token = response.json()['access_token']
-
-    # get object id from case number
-    url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/query/"
-    query = f"SELECT Id FROM Case WHERE CaseNumber = '{case_no}'"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-
-    response = requests.request("GET", url, headers=headers, params={"q": query}, timeout=10)
-
-    if response.status_code in [200, 201]:
-        records = response.json().get("records", [])
-        what_id = records[0].get("Id")
-        print(what_id)
-    else:
-        print(f"No case found for Case Number: {case_no}")
     
-    # create task via api
-    url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/composite/sobjects"
-    payload = json.dumps({
-        "allOrNone": False,
-        "records": [
-            {
-                "attributes": {"type": "Task"},
-                "WhatId": what_id,
-                "Subject" : task_subject,
-                "Priority" : task_priority,
-                "Status" : task_status
-            }
-        ]
-    })
+    # create chatter via api
+    url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/feed-elements/"
+    payload = json.dumps(
+        {
+           "body":{
+              "messageSegments":[
+                 {
+                    "type":"Text",
+                    "text":detail
+                 }
+              ]
+           },
+           "capabilities":{
+              "questionAndAnswers" : {
+                  "questionTitle" : question
+                }
+
+           },
+           "feedElementType": "FeedItem",
+           "subjectId": cell_value
+        }
+    )
 
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
-    print(f'create task payload: {payload}')
-    print(f'create task headers: {headers}')
+    print(f'create chatter payload: {payload}')
+    print(f'create chatter headers: {headers}')
     response = requests.post(url, headers=headers, data=payload, timeout=10)
-    print(f'create task response: {response.json()}')
-    print(f'create task response status: {response.status_code}')
-    if response.status_code in [200, 201] and response.json()[0]['success']:
+    print(f'create chatter response: {response.json()}')
+    print(f'create chatter response status: {response.status_code}')
+    if response.status_code in [200, 201]:
         return Response(status=200, mimetype="application/json")
     else:
         return Response(status=response.status_code, mimetype="application/json", response=json.dumps(response.json()))

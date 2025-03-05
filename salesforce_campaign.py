@@ -16,7 +16,7 @@ load_dotenv()
 BASE_DOMAIN = f"https://{os.environ.get('REGION')}-{os.environ.get('PROJECT')}.cloudfunctions.net/{os.environ.get('ACTION_NAME')}-"
 
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#actions-list-endpoint
-def action_list(request):
+def salesforce_action_list(request):
     """Return action hub list endpoint data for action"""
     auth = utils.authenticate(request)
     if auth.status_code != 200:
@@ -48,12 +48,12 @@ def action_list(request):
                 'uses_oauth': True
             },
             {
-                'name': 'salesforce-task-creator-poc',
-                'label': 'Salesforce Task Creator POC',
+                'name': 'salesforce-post-creator-poc',
+                'label': 'Post',
                 'supported_action_types': ['query', 'cell', 'dashboard'],
                 "icon_data_uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABC0lEQVQ4jaXTL0vDURjF8c/zQ0RETCJG2RbE4GsYJjGbDT+LwVdgFLOYBfcCjGI2GUxiMI2tGERERERERHwMczD/4rYDF275nuce7nkiM8MQKoaBYaR7if3WCFERWSGauJQIE+RLlrWnnwwiMyMa7VFsYQPjeEQDk1jEFXZwiFE8Z1l97TVYko7En5HucYIpNGXu5lrtvGuwjc0+41+j3p141ycMM1gvotGe1ck+gHK+wApmBzOIiwJjg8FusFfgCA//hG5xjgNyOctqs/sLdZRY+Di9usZrB85N4hSPn3oAsd8qUBFxiLmeias40ynPt5fG12WKRnsaSzqNPEYry+rbb5m+GfSrobfxHWu4YtTFW9MMAAAAAElFTkSuQmCC",
-                'form_url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-task-creator-poc-form',
-                'url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-task-creator-poc-execute',
+                'form_url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-post-creator-poc-form',
+                'url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-post-creator-poc-execute',
                 'supported_formats': ['json', 'csv_zip'],
                 'required_fields': [{"any_tag": ["sfdc_lead_id"]}],
                 'supported_formattings': ['formatted'],
@@ -70,12 +70,56 @@ def action_list(request):
                 'uses_oauth': True
             },
             {
-                'name': 'salesforce-chatter-creator-poc',
-                'label': 'Salesforce Chatter Creator POC',
+                'name': 'salesforce-question-creator-poc',
+                'label': 'Question',
                 'supported_action_types': ['query', 'cell', 'dashboard'],
                 "icon_data_uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABC0lEQVQ4jaXTL0vDURjF8c/zQ0RETCJG2RbE4GsYJjGbDT+LwVdgFLOYBfcCjGI2GUxiMI2tGERERERERHwMczD/4rYDF275nuce7nkiM8MQKoaBYaR7if3WCFERWSGauJQIE+RLlrWnnwwiMyMa7VFsYQPjeEQDk1jEFXZwiFE8Z1l97TVYko7En5HucYIpNGXu5lrtvGuwjc0+41+j3p141ycMM1gvotGe1ck+gHK+wApmBzOIiwJjg8FusFfgCA//hG5xjgNyOctqs/sLdZRY+Di9usZrB85N4hSPn3oAsd8qUBFxiLmeias40ynPt5fG12WKRnsaSzqNPEYry+rbb5m+GfSrobfxHWu4YtTFW9MMAAAAAElFTkSuQmCC",
-                'form_url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-chatter-creator-poc-form',
-                'url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-chatter-creator-poc-execute',
+                'form_url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-question-creator-poc-form',
+                'url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-question-creator-poc-execute',
+                'supported_formats': ['json', 'csv_zip'],
+                'required_fields': [{"any_tag": ["sfdc_lead_id"]}],
+                'supported_formattings': ['formatted'],
+                'supported_visualization_formattings': ['noapply'],
+                'params': [
+                    {
+                        'description': "Salesforce domain name, e.g. https://MyDomainName.my.salesforce.com",
+                        'label': "Salesforce domain",
+                        'name': "salesforce_domain",
+                        'required': True,
+                        'sensitive': False
+                    }
+                ],
+                'uses_oauth': True
+            },
+            {
+                'name': 'salesforce-poll-creator-poc',
+                'label': 'Poll',
+                'supported_action_types': ['query', 'cell', 'dashboard'],
+                "icon_data_uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABC0lEQVQ4jaXTL0vDURjF8c/zQ0RETCJG2RbE4GsYJjGbDT+LwVdgFLOYBfcCjGI2GUxiMI2tGERERERERHwMczD/4rYDF275nuce7nkiM8MQKoaBYaR7if3WCFERWSGauJQIE+RLlrWnnwwiMyMa7VFsYQPjeEQDk1jEFXZwiFE8Z1l97TVYko7En5HucYIpNGXu5lrtvGuwjc0+41+j3p141ycMM1gvotGe1ck+gHK+wApmBzOIiwJjg8FusFfgCA//hG5xjgNyOctqs/sLdZRY+Di9usZrB85N4hSPn3oAsd8qUBFxiLmeias40ynPt5fG12WKRnsaSzqNPEYry+rbb5m+GfSrobfxHWu4YtTFW9MMAAAAAElFTkSuQmCC",
+                'form_url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-poll-creator-poc-form',
+                'url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-poll-creator-poc-execute',
+                'supported_formats': ['json', 'csv_zip'],
+                'required_fields': [{"any_tag": ["sfdc_lead_id"]}],
+                'supported_formattings': ['formatted'],
+                'supported_visualization_formattings': ['noapply'],
+                'params': [
+                    {
+                        'description': "Salesforce domain name, e.g. https://MyDomainName.my.salesforce.com",
+                        'label': "Salesforce domain",
+                        'name': "salesforce_domain",
+                        'required': True,
+                        'sensitive': False
+                    }
+                ],
+                'uses_oauth': True
+            },
+            {
+                'name': 'salesforce-task-creator-poc',
+                'label': 'New Task',
+                'supported_action_types': ['query', 'cell', 'dashboard'],
+                "icon_data_uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABC0lEQVQ4jaXTL0vDURjF8c/zQ0RETCJG2RbE4GsYJjGbDT+LwVdgFLOYBfcCjGI2GUxiMI2tGERERERERHwMczD/4rYDF275nuce7nkiM8MQKoaBYaR7if3WCFERWSGauJQIE+RLlrWnnwwiMyMa7VFsYQPjeEQDk1jEFXZwiFE8Z1l97TVYko7En5HucYIpNGXu5lrtvGuwjc0+41+j3p141ycMM1gvotGe1ck+gHK+wApmBzOIiwJjg8FusFfgCA//hG5xjgNyOctqs/sLdZRY+Di9usZrB85N4hSPn3oAsd8qUBFxiLmeias40ynPt5fG12WKRnsaSzqNPEYry+rbb5m+GfSrobfxHWu4YtTFW9MMAAAAAElFTkSuQmCC",
+                'form_url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-task-creator-poc-form',
+                'url': 'https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-task-creator-poc-execute',
                 'supported_formats': ['json', 'csv_zip'],
                 'required_fields': [{"any_tag": ["sfdc_lead_id"]}],
                 'supported_formattings': ['formatted'],
@@ -98,7 +142,7 @@ def action_list(request):
     return Response(json.dumps(response), status=200, mimetype='application/json')
 
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#action-form-endpoint
-def action_form(request):
+def campaign_form(request):
     """Return form endpoint data for action"""
     auth = utils.authenticate(request)
     if auth.status_code != 200:
@@ -165,10 +209,8 @@ def action_form(request):
     return Response(json.dumps(response), status=200, mimetype='application/json')
 
 
-
-
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#action-execute-endpoint
-def action_execute(request):
+def campaign_execute(request):
     """Process form input and send data to Salesforce to create a new campaign"""
     auth = utils.authenticate(request)
     if auth.status_code != 200:

@@ -12,33 +12,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#action-form-endpoint
-def action_chatter_form(request):
+def poll_form(request):
     """Return form endpoint data for action"""
     auth = utils.authenticate(request)
     if auth.status_code != 200:
         return auth
-    
-    request_json = request.get_json()
-    data = request_json['data']
-    print(data)
-    
-    field_value = ''
-
-    if 'value' in data:
-        field_value = data['value']
 
     response = [{
-            'name': 'object_id',
-            'label': 'Object ID',
-            'description': 'ID of the object you want to create this Chatter for',
+            'name': 'question',
+            'label': 'Question',
+            'description': "What would you like to add?",
             'type': 'text',
-            'default': field_value,
             'required': True
         },
             {
-            'name': 'body',
-            'label': 'Content',
-            'description': "Content of the Chatter",
+            'name': 'choice_1',
+            'label': 'Choice 1',
+            'type': 'text',
+            'required': True
+        },
+            {
+            'name': 'choice_2',
+            'label': 'Choice 2',
             'type': 'text',
             'required': True
         }
@@ -50,14 +45,23 @@ def action_chatter_form(request):
 
 
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#action-execute-endpoint
-def action_chatter_execute(request):
+def poll_execute(request):
     """Process form input and send data to Salesforce to create a new campaign"""
     auth = utils.authenticate(request)
     if auth.status_code != 200:
         return auth
     request_json = request.get_json()
     form_params = request_json['form_params']
+    data = request_json['data']
+    
+    cell_value = ''
+
+    if 'value' in data:
+        cell_value = data['value']
+    
     print(form_params)
+    print(data)
+
 
     # get token using username/password
     url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
@@ -69,8 +73,9 @@ def action_chatter_execute(request):
     validation_errors = {}
     # form params error handling
     try:
-        object_id = form_params['object_id']
-        body = form_params['body']
+        question = form_params['question']
+        choice_1 = form_params['choice_1']
+        choice_2 = form_params['choice_2']
     except KeyError as e:
         validation_errors[str(e).strip("'")] = "Missing required parameter"
         response = {
@@ -105,13 +110,28 @@ def action_chatter_execute(request):
     token = response.json()['access_token']
     
     # create chatter via api
-    url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/sobjects/FeedItem"
+    url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/feed-elements/"
     payload = json.dumps(
-            {
-                "ParentId": object_id,
-                "Body": body,
-                "Type": "TextPost"
-            }
+        {
+           "body":{
+              "messageSegments":[
+                 {
+                    "type": "Text",
+                    "text": question
+                 }
+              ]
+           },
+           "capabilities":{
+              "poll":{
+                 "choices":[
+                    choice_1,
+                    choice_2
+                 ]
+              }
+           },
+           "feedElementType": "FeedItem",
+           "subjectId": cell_value
+        }
     )
 
     headers = {
