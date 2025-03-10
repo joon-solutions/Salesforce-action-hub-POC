@@ -746,6 +746,7 @@ def task_form(request):
         object_name_record = get_related_object_name.json()
         object_name_data = object_name_record['records']
         object_name = object_name_data[0]['Name']
+        default_object_list = [{ "name": cell_value, "label": object_name }]
     else:
         print(f"Error {get_category.status_code}: {get_category.text}")
 
@@ -778,6 +779,8 @@ def task_form(request):
     if get_user_info.status_code in [200, 201]:
         user_data = get_user_info.json()
         user_name = user_data['name']
+        user_id = user_data['user_id']
+        default_owner_list = [{ "name": user_id, "label": user_name }]
     else:
         print(f"Error {get_user_info.status_code}: {get_user_info.text}")
 
@@ -838,16 +841,16 @@ def task_form(request):
             'label': 'Related To',
             'type': 'select',
             'required': True,
-            'default': object_name,
-            'options': object_list
+            'options': default_object_list + object_list,
+            'default': cell_value   
         },
             {
             'name': 'assigned_to',
             'label': 'Assigned To',
             'type': 'select',
             'required': True,
-            'default': user_name,
-            'options': user_list
+            'options': default_owner_list + user_list,
+            'default': user_id
         }
     ]
     print(f'returning form json: {json.dumps(response)}')
@@ -864,15 +867,7 @@ def task_execute(request):
         return auth
     request_json = request.get_json()
     form_params = request_json['form_params']
-    data = request_json['data']
     print(form_params)
-    print(data)
-    
-    cell_value = ''
-
-    if 'value' in data:
-        cell_value = data['value']
-    
 
     # get token using username/password
     url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
