@@ -919,6 +919,23 @@ def task_execute(request):
     response = requests.request("POST", url, headers=headers, data=payload, timeout = 10)
     print(f'response: {response.json()}')
     token = response.json()['access_token']
+
+    #get email of owner
+    query = f"SELECT Email FROM User WHERE Id = '{assigned_to}'"
+    url = f"https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/query/?q={query}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    get_owner_email = requests.request("GET", url, headers=headers)
+    if get_owner_email.status_code in [200, 201]:
+        email_data = get_owner_email.json()
+        all_owner_data = email_data['records']
+        owner_email = all_owner_data[0]['Email']
+        print(owner_email)
+    else:
+        print(f"Error {get_owner_email.status_code}: {get_owner_email.text}")
  
     # create task via api
     url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/composite/sobjects"
