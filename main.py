@@ -307,6 +307,50 @@ def poll_form(request):
     auth = utils.authenticate(request)
     if auth.status_code != 200:
         return auth
+    
+    request_json = request.get_json()
+    data = request_json['data']
+    
+    cell_value = ''
+
+    if 'value' in data:
+        cell_value = data['value']
+        
+    # get token using username/password
+    url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
+    client_id = os.environ.get('SALESFORCE_CLIENT_ID')
+    client_secret = os.environ.get('SALESFORCE_CLIENT_SECRET')
+    username = os.environ.get('SALESFORCE_USERNAME')
+    password = os.environ.get('SALESFORCE_PASSWORD')
+
+    payload = {'grant_type': 'password',
+    'client_id': client_id,
+    'client_secret': client_secret,
+    'username': username,
+    'password': password}
+    headers = {}
+
+    print(f'payload: {payload}')
+    response = requests.request("POST", url, headers=headers, data=payload, timeout = 10)
+    print(f'response: {response.json()}')
+    token = response.json()['access_token']
+
+    # get proposal mentions: https://developer.salesforce.com/docs/atlas.en-us.chatterapi.meta/chatterapi/connect_resources_mentions_completions.htm
+    url = f"https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/mentions/completions?contextId={cell_value}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    get_proposal_mentions = requests.request("GET", url, headers=headers)
+    if get_proposal_mentions.status_code in [200, 201]:
+        proposal_mention_data = get_proposal_mentions.json()
+        proposal_mention_list = [
+            {'name': proposal_mention['recordId'], 'label': proposal_mention['name']}
+            for proposal_mention in proposal_mention_data['mentionCompletions']
+        ]
+    else:
+        print(f"Error {get_proposal_mentions.status_code}: {get_proposal_mentions.text}")
 
     response = [{
             'name': 'question',
@@ -314,6 +358,14 @@ def poll_form(request):
             'description': "What would you like to add?",
             'type': 'textarea',
             'required': True
+        },
+            {
+            'name': 'mention',
+            'label': 'Mention',
+            'description': "Notify a person or group about this update.",
+            'type': 'select',
+            'required': False,
+            'options': proposal_mention_list
         },
             {
             'name': 'choice_1',
@@ -401,28 +453,61 @@ def poll_execute(request):
     
     # create chatter via api
     url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/feed-elements/"
-    payload = json.dumps(
-        {
-           "body":{
-              "messageSegments":[
-                 {
-                    "type": "Text",
-                    "text": question
-                 }
-              ]
-           },
-           "capabilities":{
-              "poll":{
-                 "choices":[
-                    choice_1,
-                    choice_2
-                 ]
-              }
-           },
-           "feedElementType": "FeedItem",
-           "subjectId": cell_value
-        }
-    )
+    if 'mention' in form_params:
+        mention = form_params['mention']
+        payload = json.dumps(
+            {
+               "body":{
+                  "messageSegments":[
+                    {
+                        "type": "Text",
+                        "text": question
+                    },
+                    {
+                        "type" : "Text",
+                        "text" : " "
+                    },
+                    {   
+                        "type" : "Mention",
+                        "id" : mention
+                    }
+                  ]
+               },
+               "capabilities":{
+                  "poll":{
+                     "choices":[
+                        choice_1,
+                        choice_2
+                     ]
+                  }
+               },
+               "feedElementType": "FeedItem",
+               "subjectId": cell_value
+            }
+        )
+    else:
+        payload = json.dumps(
+            {
+               "body":{
+                  "messageSegments":[
+                     {
+                        "type": "Text",
+                        "text": question
+                     }
+                  ]
+               },
+               "capabilities":{
+                  "poll":{
+                     "choices":[
+                        choice_1,
+                        choice_2
+                     ]
+                  }
+               },
+               "feedElementType": "FeedItem",
+               "subjectId": cell_value
+            }
+        )
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -443,7 +528,51 @@ def post_form(request):
     """Return form endpoint data for action"""
     auth = utils.authenticate(request)
     if auth.status_code != 200:
-        return auth    
+        return auth
+
+    request_json = request.get_json()
+    data = request_json['data']
+    
+    cell_value = ''
+
+    if 'value' in data:
+        cell_value = data['value']
+        
+    # get token using username/password
+    url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
+    client_id = os.environ.get('SALESFORCE_CLIENT_ID')
+    client_secret = os.environ.get('SALESFORCE_CLIENT_SECRET')
+    username = os.environ.get('SALESFORCE_USERNAME')
+    password = os.environ.get('SALESFORCE_PASSWORD')
+
+    payload = {'grant_type': 'password',
+    'client_id': client_id,
+    'client_secret': client_secret,
+    'username': username,
+    'password': password}
+    headers = {}
+
+    print(f'payload: {payload}')
+    response = requests.request("POST", url, headers=headers, data=payload, timeout = 10)
+    print(f'response: {response.json()}')
+    token = response.json()['access_token']
+
+    # get proposal mentions: https://developer.salesforce.com/docs/atlas.en-us.chatterapi.meta/chatterapi/connect_resources_mentions_completions.htm
+    url = f"https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/mentions/completions?contextId={cell_value}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    get_proposal_mentions = requests.request("GET", url, headers=headers)
+    if get_proposal_mentions.status_code in [200, 201]:
+        proposal_mention_data = get_proposal_mentions.json()
+        proposal_mention_list = [
+            {'name': proposal_mention['recordId'], 'label': proposal_mention['name']}
+            for proposal_mention in proposal_mention_data['mentionCompletions']
+        ]
+    else:
+        print(f"Error {get_proposal_mentions.status_code}: {get_proposal_mentions.text}")  
 
     response = [{
             'name': 'content',
@@ -451,6 +580,14 @@ def post_form(request):
             'description': "Share an update",
             'type': 'textarea',
             'required': True
+        },
+            {
+            'name': 'mention',
+            'label': 'Mention',
+            'description': "Notify a person or group about this update.",
+            'type': 'select',
+            'required': False,
+            'options': proposal_mention_list
         }
     ]
     print(f'returning form json: {json.dumps(response)}')
@@ -524,19 +661,45 @@ def post_execute(request):
     
     # create chatter via api
     url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/feed-elements/"
-    payload = json.dumps(
-        { 
-           "body" : {
-              "messageSegments" : [
-                 {
+    if 'mention' in form_params:
+        mention = form_params['mention']
+        payload = json.dumps(
+            { 
+            "body" : {
+                "messageSegments" : [
+                  {
                     "type" : "Text",
                     "text" : content
-                 }]
-               },
-           "feedElementType" : "FeedItem",
-           "subjectId" : cell_value
-        }
-    )
+                  },
+                  {
+                    "type" : "Text",
+                    "text" : " "
+                  },
+                  {   
+                    "type" : "Mention",
+                    "id" : mention
+                  }
+                ]
+            },
+            "feedElementType" : "FeedItem",
+            "subjectId" : cell_value
+            }
+        )
+    else:
+        payload = json.dumps(
+            { 
+            "body" : {
+               "messageSegments" : [
+                     {
+                         "type" : "Text",
+                         "text" : content
+                     }
+                ]
+             },
+            "feedElementType" : "FeedItem",
+            "subjectId" : cell_value
+            }
+        )
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -558,6 +721,50 @@ def question_form(request):
     auth = utils.authenticate(request)
     if auth.status_code != 200:
         return auth
+    
+    request_json = request.get_json()
+    data = request_json['data']
+    
+    cell_value = ''
+
+    if 'value' in data:
+        cell_value = data['value']
+        
+    # get token using username/password
+    url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
+    client_id = os.environ.get('SALESFORCE_CLIENT_ID')
+    client_secret = os.environ.get('SALESFORCE_CLIENT_SECRET')
+    username = os.environ.get('SALESFORCE_USERNAME')
+    password = os.environ.get('SALESFORCE_PASSWORD')
+
+    payload = {'grant_type': 'password',
+    'client_id': client_id,
+    'client_secret': client_secret,
+    'username': username,
+    'password': password}
+    headers = {}
+
+    print(f'payload: {payload}')
+    response = requests.request("POST", url, headers=headers, data=payload, timeout = 10)
+    print(f'response: {response.json()}')
+    token = response.json()['access_token']
+
+    # get proposal mentions: https://developer.salesforce.com/docs/atlas.en-us.chatterapi.meta/chatterapi/connect_resources_mentions_completions.htm
+    url = f"https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/mentions/completions?contextId={cell_value}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    get_proposal_mentions = requests.request("GET", url, headers=headers)
+    if get_proposal_mentions.status_code in [200, 201]:
+        proposal_mention_data = get_proposal_mentions.json()
+        proposal_mention_list = [
+            {'name': proposal_mention['recordId'], 'label': proposal_mention['name']}
+            for proposal_mention in proposal_mention_data['mentionCompletions']
+        ]
+    else:
+        print(f"Error {get_proposal_mentions.status_code}: {get_proposal_mentions.text}")
 
     response = [{
             'name': 'question',
@@ -573,6 +780,14 @@ def question_form(request):
             'type': 'textarea',
             'required': True
         },
+            {
+            'name': 'mention',
+            'label': 'Mention',
+            'description': "Notify a person or group about this update.",
+            'type': 'select',
+            'required': False,
+            'options': proposal_mention_list
+        }
     ]
     print(f'returning form json: {json.dumps(response)}')
     return Response(json.dumps(response), status=200, mimetype='application/json')
@@ -645,26 +860,57 @@ def question_execute(request):
     
     # create chatter via api
     url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/feed-elements/"
-    payload = json.dumps(
-        {
-           "body":{
-              "messageSegments":[
-                 {
-                    "type":"Text",
-                    "text":detail
-                 }
-              ]
-           },
-           "capabilities":{
-              "questionAndAnswers" : {
-                  "questionTitle" : question
-                }
+    if 'mention' in form_params:
+        mention = form_params['mention']
+        payload = json.dumps(
+            {
+               "body":{
+                  "messageSegments":[
+                     {
+                        "type":"Text",
+                        "text":detail
+                     },
+                     {
+                         "type" : "Text",
+                         "text" : " "
+                     },
+                     {   
+                         "type" : "Mention",
+                         "id" : mention
+                     }
+                  ]
+               },
+               "capabilities":{
+                  "questionAndAnswers" : {
+                      "questionTitle" : question
+                    }
 
-           },
-           "feedElementType": "FeedItem",
-           "subjectId": cell_value
-        }
-    )
+               },
+               "feedElementType": "FeedItem",
+               "subjectId": cell_value
+            }
+        )
+    else:
+        payload = json.dumps(
+            {
+               "body":{
+                  "messageSegments":[
+                     {
+                        "type":"Text",
+                        "text":detail
+                     }
+                  ]
+               },
+               "capabilities":{
+                  "questionAndAnswers" : {
+                      "questionTitle" : question
+                    }
+
+               },
+               "feedElementType": "FeedItem",
+               "subjectId": cell_value
+            }
+        )
 
     headers = {
         "Authorization": f"Bearer {token}",
