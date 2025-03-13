@@ -5,6 +5,7 @@
 *.pyc
 deploy.key
 deploy_joon.sh
-main-dev.py
+main_dev.py
 Pipfile*
 test.ipynb
+beck_test
