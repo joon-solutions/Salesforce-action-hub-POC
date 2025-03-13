@@ -962,22 +962,24 @@ def task_form(request):
     token = response.json()['access_token']
 
     # get category list
-    query = "SELECT Category__c FROM Task WHERE CreatedDate >= LAST_N_MONTHS:3 GROUP BY Category__c"
-    url = f"https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/query/?q={query}"
+    url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/sobjects/Task/describe"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
 
-    get_category = requests.request("GET", url, headers=headers)
-    if get_category.status_code in [200, 201]:
-        category_data = get_category.json()
-        category_list = [
-            {'name': category['Category__c'], 'label': category['Category__c']}
-            for category in category_data['records']
-        ]
+    get_task_data = requests.request("GET", url, headers=headers)
+    if get_task_data.status_code in [200, 201]:
+        task_data = get_task_data.json()
+        fields = task_data['fields']
+        for field in fields:
+                if field["name"] == 'Category__c' and "picklistValues" in field:
+                    category_list = [
+                        {'name': item['value'], 'label': item['value']}
+                        for item in field['picklistValues'] if item["active"]
+                    ]
     else:
-        print(f"Error {get_category.status_code}: {get_category.text}")
+        print(f"Error {get_task_data.status_code}: {get_task_data.text}")
 
     #get default name for related object
     query = f"SELECT Name FROM Customer_Group__c WHERE Id = '{cell_value}'"
@@ -994,10 +996,10 @@ def task_form(request):
         object_name = object_name_data[0]['Name']
         default_object_list = [{ "name": cell_value, "label": object_name }]
     else:
-        print(f"Error {get_category.status_code}: {get_category.text}")
+        print(f"Error {get_related_object_name.status_code}: {get_related_object_name.text}")
 
     #get other object data list
-    query = f"SELECT Id, Name FROM Customer_Group__c LIMIT 25"
+    query = f"SELECT Id, Name FROM Customer_Group__c LIMIT 10"
     url = f"https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/query/?q={query}"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -1031,7 +1033,7 @@ def task_form(request):
         print(f"Error {get_user_info.status_code}: {get_user_info.text}")
 
     #get all user info
-    query = f"SELECT Id, Name FROM User LIMIT 25"
+    query = f"SELECT Id, Name FROM User LIMIT 10"
     url = f"https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/query/?q={query}"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -1211,6 +1213,76 @@ def task_execute(request):
     print(f'create task response: {response.json()}')
     print(f'create task response status: {response.status_code}')
     if response.status_code in [200, 201] and response.json()[0]['success']:
+        send_task_gchat(subject, due_date, owner_email)
         return Response(status=200, mimetype="application/json")
     else:
         return Response(status=response.status_code, mimetype="application/json", response=json.dumps(response.json()))
+
+#url hard coded for now. This solution does not allow @users, we would need to move to chat api for this (which if this is adopted will be the solution we use)
+#todo: pass in url to created salesforce task, and embed in the card in the button link
+def send_task_gchat(subject, due_date, owner_email):
+    if owner_email:
+        card_body = json.dumps(
+            {
+                "cardsV2": [
+                    {
+                        "cardId": "salesforceTaskCard",
+                        "card": {
+                            "header": {
+                                "title": "New Salesforce Task Assigned!",
+                                "subtitle": "Click to view details.",
+                                "imageUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABC0lEQVQ4jaXTL0vDURjF8c/zQ0RETCJG2RbE4GsYJjGbDT+LwVdgFLOYBfcCjGI2GUxiMI2tGERERERERHwMczD/4rYDF275nuce7nkiM8MQKoaBYaR7if3WCFERWSGauJQIE+RLlrWnnwwiMyMa7VFsYQPjeEQDk1jEFXZwiFE8Z1l97TVYko7En5HucYIpNGXu5lrtvGuwjc0+41+j3p141ycMM1gvotGe1ck+gHK+wApmBzOIiwJjg8FusFfgCA//hG5xjgNyOctqs/sLdZRY+Di9usZrB85N4hSPn3oAsd8qUBFxiLmeias40ynPt5fG12WKRnsaSzqNPEYry+rbb5m+GfSrobfxHWu4YtTFW9MMAAAAAElFTkSuQmCC",
+                                "imageType": "CIRCLE",
+                            },
+                            "sections": [
+                                {
+                                    "widgets": [
+                                        {
+                                            "textParagraph": {
+                                                "text": f"Hey {owner_email}, a new Salesforce task has been assigned to you!"
+                                            }
+                                        },
+                                        {
+                                            "decoratedText": {
+                                                "topLabel": "Task Subject",
+                                                "text": f"{subject}",
+                                                "wrapText": True,
+                                            }
+                                        },
+                                        {
+                                            "decoratedText": {
+                                                "topLabel": "Due Date",
+                                                "text": f"{due_date}",
+                                            }
+                                        },
+                                        {
+                                            "buttonList": {
+                                                "buttons": [
+                                                    {
+                                                        "text": "View Task in Salesforce",
+                                                        "onClick": {
+                                                            "openLink": {
+                                                                "url": "SALESFORCE_TASK_URL"
+                                                            }
+                                                        },
+                                                    }
+                                                ]
+                                            }
+                                        },
+                                    ]
+                                }
+                            ],
+                        },
+                    }
+                ]
+            }
+        )
+        headers = {
+            "Content-Type": "application/json"
+        }
+        url = "https://chat.googleapis.com/v1/spaces/AAAAXHq00t0/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=rI4xW7AtuAC9FSZhBdpLDAs7koLmtQ9lSvi3aFIixzg"
+        try:
+            requests.post(url, headers=headers, data=card_body, timeout=10)
+        #do not really care if this fails right now as its poc, no specific error handling, but will log error.
+        except Exception as e:
+            print(f"Error sending google chat: {e}")
