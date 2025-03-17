@@ -379,9 +379,16 @@ def task_execute(request):
     print(f'create task response: {response.json()}')
     print(f'create task response status: {response.status_code}')
     if response.status_code in [200, 201] and response.json()[0]['success']:
-        #send notification to google chat
-        #url hard coded for now. This solution does not allow @users, we would need to move to chat api for this (which if this is adopted will be the solution we use)
-        #todo: pass in url to created salesforce task, and embed in the card in the button link
+        send_task_gchat(subject, due_date, owner_email)
+        return Response(status=200, mimetype="application/json")
+    else:
+        return Response(status=response.status_code, mimetype="application/json", response=json.dumps(response.json()))
+    
+
+#url hard coded for now. This solution does not allow @users, we would need to move to chat api for this (which if this is adopted will be the solution we use)
+#todo: pass in url to created salesforce task, and embed in the card in the button link
+def send_task_gchat(subject, due_date, owner_email):
+    if owner_email:
         card_body = json.dumps(
             {
                 "cardsV2": [
@@ -446,5 +453,3 @@ def task_execute(request):
         #do not really care if this fails right now as its poc, no specific error handling, but will log error.
         except Exception as e:
             print(f"Error sending google chat: {e}")
-    else:
-        return Response(status=response.status_code, mimetype="application/json", response=json.dumps(response.json()))
