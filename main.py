@@ -4,7 +4,7 @@ import os
 import base64
 import utils
 import re
-
+from urllib.parse import urlencode
 from datetime import datetime
 from flask import request, Response, redirect
 from dotenv import load_dotenv
@@ -146,3 +146,39 @@ def salesforce_action_list(request):
 
     print('returning integrations json')
     return Response(json.dumps(response), status=200, mimetype='application/json')
+
+
+def salesforce_action_oauth(request):
+    """Return form endpoint data for action"""
+    code = request.args.get('code')
+    encrypted_state = request.args.get('state')
+    state_url = utils.decode_state(encrypted_state)
+
+    client_id = os.environ.get('SALESFORCE_CLIENT_ID')
+    client_secret = os.environ.get('SALESFORCE_CLIENT_SECRET')
+    # redirect_uri = os.environ.get('SALESFORCE_REDIRECT_URI', 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token')
+    payload = {
+        "grant_type": "authorization_code",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "code": code,
+        "redirect_uri": "https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-action-poc-oauth"
+    }
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token"
+
+    encoded_payload = urlencode(payload)
+
+    response = requests.post(url, headers=headers, data=encoded_payload, timeout=10)
+    print(f"response: {response.json()}")
+    print(f"response.status_code: {response.status_code}")
+
+    if response.status_code in [200, 201]:
+        token = response.json()['access_token']
+        utils.store_state(state_url, {'token': token})
+        # return redirect(f"{BASE_DOMAIN}form")
+        return Response(response="Salesforce Authorized Successfully", status=response.status_code, mimetype="application/json")
+    else:
+        return Response(response=response, status=response.status_code, mimetype="application/json")

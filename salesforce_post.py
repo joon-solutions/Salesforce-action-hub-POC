@@ -12,9 +12,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-
-BASE_DOMAIN = f"https://{os.environ.get('REGION')}-{os.environ.get('PROJECT')}.cloudfunctions.net/{os.environ.get('ACTION_NAME')}-"
-
 # https://github.com/looker-open-source/actions/blob/master/docs/action_api.md#action-form-endpoint
 def post_form(request):
     """Return form endpoint data for action"""
@@ -23,65 +20,79 @@ def post_form(request):
         return auth
 
     request_json = request.get_json()
+    print(f"INPUT:{request_json}")
     data = request_json['data']
+    state_url = data['state_url']
     
     cell_value = ''
 
     if 'value' in data:
         cell_value = data['value']
         
-    # get token using username/password
-    url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
+    # oauth
+    # url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
     client_id = os.environ.get('SALESFORCE_CLIENT_ID')
-    client_secret = os.environ.get('SALESFORCE_CLIENT_SECRET')
-    username = os.environ.get('SALESFORCE_USERNAME')
-    password = os.environ.get('SALESFORCE_PASSWORD')
+    # client_secret = os.environ.get('SALESFORCE_CLIENT_SECRET')
+    # username = os.environ.get('SALESFORCE_USERNAME')
+    # password = os.environ.get('SALESFORCE_PASSWORD')
 
-    payload = {'grant_type': 'password',
-    'client_id': client_id,
-    'client_secret': client_secret,
-    'username': username,
-    'password': password}
-    headers = {}
+    auth_url = (f"https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/authorize?response_type=code"
+        f"&client_id={client_id}"
+        f"&redirect_uri=https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-action-poc-oauth"
+        )
+    encrypted_state = utils.encode_state(state_url)
+    auth_url_with_state = f"{auth_url}&state={encrypted_state}"
 
-    print(f'payload: {payload}')
-    response = requests.request("POST", url, headers=headers, data=payload, timeout = 10)
-    print(f'response: {response.json()}')
-    token = response.json()['access_token']
+    response_login = [    {
+        'name': 'login',
+        'type': 'oauth_link',
+        'label': 'Log in',
+        'description': 'Log in to your Salesforce account.',
+        'oauth_url': auth_url_with_state,
+    }]
 
-    # get proposal mentions: https://developer.salesforce.com/docs/atlas.en-us.chatterapi.meta/chatterapi/connect_resources_mentions_completions.htm
-    url = f"https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/mentions/completions?contextId={cell_value}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
+    state_json = json.loads(data['state_json'])
 
-    get_proposal_mentions = requests.request("GET", url, headers=headers)
-    if get_proposal_mentions.status_code in [200, 201]:
-        proposal_mention_data = get_proposal_mentions.json()
-        proposal_mention_list = [
-            {'name': proposal_mention['recordId'], 'label': proposal_mention['name']}
-            for proposal_mention in proposal_mention_data['mentionCompletions']
-        ]
-    else:
-        print(f"Error {get_proposal_mentions.status_code}: {get_proposal_mentions.text}")  
-
-    response = [{
-            'name': 'content',
-            'label': 'Content',
-            'description': "Share an update",
-            'type': 'textarea',
-            'required': True
-        },
-            {
-            'name': 'mention',
-            'label': 'Mention',
-            'description': "Notify a person or group about this update.",
-            'type': 'select',
-            'required': False,
-            'options': proposal_mention_list
+    if 'token' in state_json:
+        token = state_json.get('token')
+        # get proposal mentions: https://developer.salesforce.com/docs/atlas.en-us.chatterapi.meta/chatterapi/connect_resources_mentions_completions.htm
+        url = f"https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/mentions/completions?contextId={cell_value}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
         }
-    ]
+
+        get_proposal_mentions = requests.request("GET", url, headers=headers)
+        if get_proposal_mentions.status_code in [200, 201]:
+            proposal_mention_data = get_proposal_mentions.json()
+            proposal_mention_list = [
+                {'name': proposal_mention['recordId'], 'label': proposal_mention['name']}
+                for proposal_mention in proposal_mention_data['mentionCompletions']
+            ]
+        else:
+            utils.reset_state(data['state_url'])
+            print(f"Error {get_proposal_mentions.status_code}: {get_proposal_mentions.text}")  
+
+        response_form = [{
+                'name': 'content',
+                'label': 'Content',
+                'description': "Share an update",
+                'type': 'textarea',
+                'required': True
+            },
+                {
+                'name': 'mention',
+                'label': 'Mention',
+                'description': "Notify a person or group about this update.",
+                'type': 'select',
+                'required': False,
+                'options': proposal_mention_list
+            }
+        ]
+        response = response_form
+    else:
+        response = response_login
+    
     print(f'returning form json: {json.dumps(response)}')
     return Response(json.dumps(response), status=200, mimetype='application/json')
 
@@ -100,19 +111,18 @@ def post_execute(request):
     
     print(form_params)
     print(data)
+
+    state_json = json.loads(data['state_json'])
+
+    if 'token' in state_json:
+        token = state_json.get('token')
+    else:
+        return utils.handle_error('No token found in state_json', 400)
     
     cell_value = ''
 
     if 'value' in data:
         cell_value = data['value']
-    
-
-    # get token using username/password
-    url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
-    client_id = os.environ.get('SALESFORCE_CLIENT_ID')
-    client_secret = os.environ.get('SALESFORCE_CLIENT_SECRET')
-    username = os.environ.get('SALESFORCE_USERNAME')
-    password = os.environ.get('SALESFORCE_PASSWORD')
 
     validation_errors = {}
     # form params error handling
@@ -138,18 +148,6 @@ def post_execute(request):
         }
         return Response(status=400, mimetype="application/json", response=json.dumps(response))
 
-
-    payload = {'grant_type': 'password',
-    'client_id': client_id,
-    'client_secret': client_secret,
-    'username': username,
-    'password': password}
-    headers = {}
-
-    print(f'payload: {payload}')
-    response = requests.request("POST", url, headers=headers, data=payload, timeout = 10)
-    print(f'response: {response.json()}')
-    token = response.json()['access_token']
     
     # create chatter via api
     url = "https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/feed-elements/"
@@ -205,5 +203,6 @@ def post_execute(request):
     if response.status_code in [200, 201]:
         return Response(status=200, mimetype="application/json")
     else:
+        utils.reset_state(data['state_url'])
         return Response(status=response.status_code, mimetype="application/json", response=json.dumps(response.json()))
     
