@@ -30,15 +30,11 @@ def post_form(request):
         cell_value = data['value']
         
     # oauth
-    # url = 'https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/token'
     client_id = os.environ.get('SALESFORCE_CLIENT_ID')
-    # client_secret = os.environ.get('SALESFORCE_CLIENT_SECRET')
-    # username = os.environ.get('SALESFORCE_USERNAME')
-    # password = os.environ.get('SALESFORCE_PASSWORD')
-
+    redirect_uri = os.environ.get('SALESFORCE_REDIRECT_URI')
     auth_url = (f"https://one-line--ofuat.sandbox.my.salesforce.com/services/oauth2/authorize?response_type=code"
         f"&client_id={client_id}"
-        f"&redirect_uri=https://asia-southeast1-joon-sandbox.cloudfunctions.net/salesforce-action-poc-oauth"
+        f"&redirect_uri={redirect_uri}"
         )
     encrypted_state = utils.encode_state(state_url)
     auth_url_with_state = f"{auth_url}&state={encrypted_state}"
@@ -56,7 +52,7 @@ def post_form(request):
     if 'token' in state_json:
         token = state_json.get('token')
         # get proposal mentions: https://developer.salesforce.com/docs/atlas.en-us.chatterapi.meta/chatterapi/connect_resources_mentions_completions.htm
-        url = f"https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/mentions/completions?contextId={cell_value}"
+        url = f"https://one-line--ofuat.sandbox.my.salesforce.com/services/data/v63.0/chatter/mentions/completions?contextId={cell_value}&q=a"
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
