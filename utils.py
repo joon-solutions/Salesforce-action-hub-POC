@@ -90,7 +90,7 @@ def store_state(state_url, data):
     try:
         response = requests.post(state_url, json=data, timeout=10)
         response.raise_for_status()
-        print(f"Successfully stored data in state: {data}")
+        print(f"Successfully stored data in state: {state_url}")
         return True
     except requests.exceptions.RequestException as e:
         print(f"Error storing data in state: {e}")
